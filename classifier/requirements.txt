@@ -1,0 +1,4 @@
+torch==1.12
+transformers==4.22.2
+sklearn
+h5py==3.7.0

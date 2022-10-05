@@ -1,0 +1,6 @@
+/raw_data/
+/model_ckpts/
+/json_data/
+/deprecated_data/
+/.vscode/
+/classifier/logs/
