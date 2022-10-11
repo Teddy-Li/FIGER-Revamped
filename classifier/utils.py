@@ -71,14 +71,18 @@ def compute_metrics(p: EvalPrediction, eval_method: str = 'macrof1') -> Dict:
     predictions, true_labels = p.predictions, p.label_ids
 
     eval_method = eval(eval_method)
-    thresholds = [x*0.05 for x in range(1, 20)]
+    thresholds = [x*0.01 for x in range(1, 25)]
 
     best_macrof1 = 0
     best_macrof1_prec = None
     best_macrof1_rec = None
+    best_macrof1_thresh = None
     best_microf1 = 0
+    best_microf1_thresh = None
     best_strict_acc = 0
+    best_strict_acc_thresh = None
     best_partial_acc = 0
+    best_partial_acc_thresh = None
     print(f"Beginning to compute metrics...")
 
     for thres in thresholds:
@@ -100,20 +104,24 @@ def compute_metrics(p: EvalPrediction, eval_method: str = 'macrof1') -> Dict:
 
         if s_acc > best_strict_acc:
             best_strict_acc = s_acc
+            best_strict_acc_thresh = thres
         if p_acc > best_partial_acc:
             best_partial_acc = p_acc
+            best_partial_acc_thresh = thres
         if macro_f1 > best_macrof1:
             best_macrof1 = macro_f1
             best_macrof1_prec = prec
             best_macrof1_rec = rec
+            best_macrof1_thresh = thres
         if micro_f1 > best_microf1:
             best_microf1 = micro_f1
+            best_microf1_thresh = thres
         # print("!!!!!!")
 
-    print(f'Best Macro F1: {best_macrof1}; Precision: {best_macrof1_prec}; Recall: {best_macrof1_rec}')
-    print(f'Best Micro F1: {best_microf1}')
-    print(f'Best Strict Accuracy: {best_strict_acc}')
-    print(f'Best Partial Accuracy: {best_partial_acc}')
+    print(f'Best Macro F1: {best_macrof1}; Precision: {best_macrof1_prec}; Recall: {best_macrof1_rec}; threshold: {best_macrof1_thresh}')
+    print(f'Best Micro F1: {best_microf1}; threshold: {best_microf1_thresh}')
+    print(f'Best Strict Accuracy: {best_strict_acc}; threshold: {best_strict_acc_thresh}')
+    print(f'Best Partial Accuracy: {best_partial_acc}; threshold: {best_partial_acc_thresh}')
 
     return {
         'eval_strict_acc': best_strict_acc,

@@ -24,6 +24,9 @@ class BertForFiger(BertPreTrainedModel):
 
 	def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
 				inputs_embeds=None, left_mask=None, entity_mask=None, right_mask=None, labels=None):
+		# TODO: for some reason the F-1 score is always 0.0 when the encode_mode is 'left_right' or 'left_right_entity'.
+		# TODO: eval loss there is NAN. Maybe the problem is in the loss function or the logit output.
+
 		outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids,
 							position_ids=position_ids, head_mask=head_mask, inputs_embeds=inputs_embeds)
 		sequence_output = outputs[0]

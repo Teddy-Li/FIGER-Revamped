@@ -8,11 +8,12 @@ lm_name=$1
 encode_mode=$2
 ckpt_dir=$3
 datadir=$4
-flag1=${5}
-flag2=${6}
-flag3=${7}
-flag4=${8}
-flag5=${9}
+task=$5  # "dev" or "test"
+flag1=${6}
+flag2=${7}
+flag3=${8}
+flag4=${9}
+flag5=${10}
 
 # This is the script for training the Figer model.
 # Path: classifier/train_script.sh
@@ -25,7 +26,7 @@ cp -rv ../json_data/test*.cache.h5 "${datadir}";
 
 echo "Beginning Evaluation..."
 
-python -u train.py --do_dev --data_dir "${datadir}" --model_name_or_path ../../lms/"${lm_name}" --encode_mode "${encode_mode}" \
+python -u train.py --do_${task} --data_dir "${datadir}" --model_name_or_path ../../lms/"${lm_name}" --encode_mode "${encode_mode}" \
 --output_dir "${ckpt_dir}" ${flag1} ${flag2} ${flag3} ${flag4} ${flag5}
 
 

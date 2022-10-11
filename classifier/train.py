@@ -57,12 +57,12 @@ def train(model_name_or_path: str, types_list: list, encode_mode: str, train_fn:
 		logging_first_step=True,  # log and evaluate the first `global_step`-th training step
 		logging_steps=logging_steps,  # log & save weights each logging_steps
 		save_steps=save_steps,  # save checkpoint each save_steps
-		save_total_limit=5,  # number of total save model checkpoints
+		save_total_limit=3,  # number of total save model checkpoints
 		seed=seed,  # seed for initializing training
 		fp16=fp16_flag,  # whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit
 		fp16_opt_level=fp16_opt_level,  # for fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details at https://nvidia.github.io/apex/amp.html
 		fp16_full_eval=fp16_fulleval,  # whether to use full fp16 evaluation
-		dataloader_num_workers=0,  # number of subprocesses to use for data loading
+		dataloader_num_workers=4,  # number of subprocesses to use for data loading
 		# label_names=,  # the list of all labels
 		load_best_model_at_end=True,  # load the best model found during training at the end of the training
 		metric_for_best_model='macro_f1',  # metric to use to compare two different models
@@ -84,6 +84,10 @@ def train(model_name_or_path: str, types_list: list, encode_mode: str, train_fn:
 
 	print(f"Start training......")
 	trainer.train()
+
+	print(f"Saving best checkpoint to {os.path.join(output_dir, 'best_ckpt/')}")
+	model.save_pretrained(os.path.join(output_dir, 'best_ckpt/'))
+	print(f"Done.")
 
 
 def evaluate(model_name_or_path, eval_fn, typeset_fn, ckpt_dir, max_len, per_device_eval_batch_size,
@@ -158,16 +162,18 @@ def predict(model_name_or_path, test_fn, test_out_fn, typeset_fn, ckpt_dir, max_
 	out_fp = open(test_out_fn, 'w', encoding='utf8')
 	for (pred, entry) in zip(predictions.predictions, test_dataset):
 		pred = np.where(pred > threshold, 1, 0)
+		assert len(pred) == num_labels
 		out_item = {
-			'id': entry['id'],
-			'sentid': entry['sentid'],
-			'fileid': entry['fileid'],
-			'entity_name': entry['entity_name'],
-			'type_preds': [types_list[i] for i in pred]
+			'id': entry['id'].decode('ascii'),
+			'sentid': entry['sentid'].decode('ascii'),
+			'fileid': entry['fileid'].decode('ascii'),
+			'entity_name': entry['entity_name'].decode('ascii'),
+			'type_preds': [types_list[i] for i in range(num_labels) if pred[i] == 1],
 		}
 		if 'labels' in entry:
 			assert all(x in [0, 1] for x in entry['labels'])
-			out_item['labels'] = [types_list[i] for i in entry['labels'] if entry['labels'][i] == 1]
+			assert len(entry['labels']) == num_labels
+			out_item['labels'] = [types_list[i] for i in range(num_labels) if entry['labels'][i] == 1]
 		out_line = json.dumps(out_item, ensure_ascii=False)
 		out_fp.write(out_line + '\n')
 
@@ -186,6 +192,16 @@ def build_cache(model_name_or_path: str, train_fn: str, dev_fn: str, test_fn: st
 
 	print(f"Building test set entries......")
 	test_dataset = FigerDataset(test_fn, typeset_fn, tokenizer, num_labels, 0, max_len, labels_key, reload_data=reload_data)
+
+	print(f"Done!")
+
+
+def build_single_cache(model_name_or_path: str, fn: str, typeset_fn: str, num_labels: int,
+					   max_len: int, labels_key: str, reload_data: bool = False):
+	tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, do_lower_case=True)
+
+	print(f"Building {fn} entries......")
+	dataset = FigerDataset(fn, typeset_fn, tokenizer, num_labels, 0, max_len, labels_key, reload_data=reload_data)
 
 	print(f"Done!")
 
@@ -224,17 +240,19 @@ if __name__ == '__main__':
 	parser.add_argument('--do_test', action='store_true')
 	parser.add_argument('--do_predict', action='store_true')
 	parser.add_argument('--do_cache', action='store_true')
+	parser.add_argument('--do_single_cache', action='store_true')
 
 	parser.add_argument('--predict_fn', type=str, default=None)
-	parser.add_argument('--threshold', type=float, default=None)
+	parser.add_argument('--predict_threshold', type=float, default=None)
 	parser.add_argument('--debug', action='store_true')
 
 	args = parser.parse_args()
 	args.train_fn = os.path.join(args.data_dir, args.train_fn)
 	args.dev_fn = os.path.join(args.data_dir, args.dev_fn)
 	args.test_fn = os.path.join(args.data_dir, args.test_fn)
-	assert args.predict_fn is None or args.predict_fn[-6:] == '.jsonl'
-	args.predict_outfn = args.predict_fn[:-6] + '_preds.jsonl' if args.predict_fn is not None else None
+	assert args.predict_fn is None or args.predict_fn[-5:] == '.json'
+	args.predict_fn = os.path.join(args.data_dir, args.predict_fn) if args.predict_fn is not None else None
+	args.predict_outfn = args.predict_fn[:-5] + '_preds.json' if args.predict_fn is not None else None
 
 	lm_model_name = args.model_name_or_path.split("/")[-1]
 	types_list = get_labelset(args.typeset_fn)
@@ -243,9 +261,14 @@ if __name__ == '__main__':
 		build_cache(args.model_name_or_path, args.train_fn, args.dev_fn, args.test_fn, args.typeset_fn,
 					len(types_list), args.max_len, args.labels_key, reload_data=args.reload_data)
 
+	if args.do_single_cache:
+		build_single_cache(args.model_name_or_path, args.predict_fn, args.typeset_fn,
+						   len(types_list), args.max_len, args.labels_key, reload_data=args.reload_data)
+
 	if args.do_train:
+		fpxx_str = 'fp16' if args.use_fp16 else 'fp32'
 		args.output_dir = os.path.join(args.output_dir, lm_model_name,
-									   f"{args.encode_mode}_{args.lr}_{args.label_smoothing_factor}")
+									   f"{args.encode_mode}_{args.lr}_{args.label_smoothing_factor}_{fpxx_str}")
 		if not os.path.exists(args.output_dir):
 			os.makedirs(args.output_dir)
 		train(model_name_or_path=args.model_name_or_path, types_list=types_list, encode_mode=args.encode_mode,
@@ -278,7 +301,7 @@ if __name__ == '__main__':
 
 	if args.do_predict:
 		print(f"Doing prediction over {args.predict_fn}; storing prediction outputs in {args.predict_outfn}...")
-		predict(model_name_or_path=args.model_name_or_path, test_fn=args.predict_fn, test_out_fn=args.prediction_outfn,
+		predict(model_name_or_path=args.model_name_or_path, test_fn=args.predict_fn, test_out_fn=args.predict_outfn,
 				typeset_fn=args.typeset_fn, ckpt_dir=args.output_dir, max_len=args.max_len,
 				per_device_eval_batch_size=args.per_device_eval_batch_size, encode_mode=args.encode_mode,
 				threshold=args.predict_threshold, labels_key=args.labels_key, reload_data=args.reload_data)
