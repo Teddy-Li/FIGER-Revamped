@@ -1,6 +1,10 @@
 # Figer Classifier
 This repository contains the code for revamping the FIGER entity typing ontology and dataset, and a simple classifier on the revamped dataset based on [BERT-base-uncased](https://huggingface.co/bert-base-uncased).
 
+This document hosts instructions for training & using the classifier.
+Please download the revamped FIGER data [HERE](https://drive.google.com/file/d/1HdT_qOA3d0pmrBdqGHj-6kfWVdZxaKQu/view?usp=sharing); alternatively, to learn more about ontology revamping please refer to [REFINE_TYPING.md](REFINE_TYPING.md).
+
+
 With the revamped ontology, we are able to achieve a 94.3% macro-F1 score on the test set, XXX improvement over the original FIGER dataset.
 
 | Model               | Dataset        | Macro-F1 | Micro-F1 |
