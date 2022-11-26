@@ -2,7 +2,7 @@
 This repository contains the code for revamping the FIGER entity typing ontology and dataset, and a simple classifier on the revamped dataset based on [BERT-base-uncased](https://huggingface.co/bert-base-uncased).
 
 This document hosts instructions for training & using the classifier.
-Please download the revamped FIGER data [HERE](https://drive.google.com/file/d/1HdT_qOA3d0pmrBdqGHj-6kfWVdZxaKQu/view?usp=sharing); alternatively, to learn more about ontology revamping please refer to [REFINE_TYPING.md](REFINE_TYPING.md).
+Please download the revamped FIGER data [HERE](https://drive.google.com/file/d/1HdT_qOA3d0pmrBdqGHj-6kfWVdZxaKQu/view?usp=sharing) and pre-trained checkpoints [here](https://uoe-my.sharepoint.com/:u:/g/personal/s2063487_ed_ac_uk/EeP84c5JZpFKo8c6SrpwcgcBIG2axM7m8bpKJxE0ywsmSQ?e=hwhl2v); alternatively, to learn more about ontology revamping please refer to [REFINE_TYPING.md](REFINE_TYPING.md).
 
 
 With the revamped ontology, we are able to achieve a 94.3% macro-F1 score on the test set, XXX improvement over the original FIGER dataset.
