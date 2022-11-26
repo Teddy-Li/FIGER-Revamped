@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# TODO: change the following accordingly for you.
 #SBATCH --job-name="figer_eval"
 #SBATCH --mail-user=tianyi.li@ed.ac.uk
 #SBATCH --mail-type=ALL

@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# TODO: change the following accordingly for you.
 #SBATCH --job-name="figer_train"
 #SBATCH --mail-user=tianyi.li@ed.ac.uk
 #SBATCH --mail-type=ALL
@@ -25,7 +25,8 @@ mkdir -p "${datadir}";
 
 df -lh
 
-rsync -avz ../json_data/*.cache.h5 "${datadir}";
+cp -rv ../json_data/*_"${lsf}".cache.h5 "${datadir}";
+
 
 echo "Beginning training..."
 
@@ -34,6 +35,8 @@ python -u train.py --do_train --data_dir "${datadir}" --model_name_or_path ../..
 --output_dir "${outdir}" ${flag1} ${flag2} ${flag3} ${flag4} ${flag5}
 
 echo "Training finished. Moving checkpoints to "
+
+#rm -r "${datadir}"/*.cache.h5
 
 cp -rv "${outdir}" "${out_dest}" && rm -rf "${outdir}";
 

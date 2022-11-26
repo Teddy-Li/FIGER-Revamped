@@ -1,49 +1,20 @@
 # Figer Classifier
+This repository contains the code for revamping the FIGER entity typing ontology and dataset, and a simple classifier on the revamped dataset based on [BERT-base-uncased](https://huggingface.co/bert-base-uncased).
 
-### Data Pre-processing
+With the revamped ontology, we are able to achieve a 94.3% macro-F1 score on the test set, XXX improvement over the original FIGER dataset.
 
-1. Download the data from [here](https://drive.google.com/open?id=0B52yRXcdpG6MMnRNV3dTdGdYQ2M), and unzip it to the `raw_data` directory;
-2. in `data_proc`, run `python load_figer_data.py` to generate the json data files (will be stored in `json_data` directory);
-3. in `data_proc`, run `python data_split.py` to split the data into train/dev/test sets;
-4. in `data_proc`, run `python create_label_mapping.py --task map2figer --subset [train / dev / test / all]` to create corresponding subsets with FIGER labels;
-5. in `data_proc`, run `python create_label_mapping.py --task assignegtype --subset [train / dev / test / all]` to create corresponding subsets with the desired label set for entGraph entity typing;
+| Model               | Dataset        | Macro-F1 | Micro-F1 |
+|---------------------|----------------|----------|----------|
+| BERT-base-uncased   | Original FIGER | XXXX     | XXXX     |
+| BERT-base-uncased   | Revamped FIGER | 94.3     | 95.1     |
+ | BERT-large-uncased  | Original FIGER | XXXX     | XXXX     |
+ | BERT-large-uncased  | Revamped FIGER | XXXX     | XXXX     |
 
-### Type Ontology Construction
 
-The above pre-processing process depends on the type ontology. This includes the following files:
-- amended_types.map: the amended mapping from Freebase labels to FIGER labels;
-- weaker_types_map.tsv: the 'weaker' mapping from Freebase labels to FIGER labels we additionally added;
-- figer2entgraph_type_map.json: the mapping from FIGER labels to entGraph labels;
-- figer2entgraph_type_map.json.set: the set of entGraph labels;
+We use this classifier to type the entities for our [Entailment Graph project](), stay tuned for more details.
 
-The procedure is to first map the Freebase labels in the output of `data_split.py` to the original FIGER labels, 
-then map these FIGER labels to the desired labels for entGraph entity typing.
-
-To amend the FIGER ontology and create the final mapping, we start from the `SUBSET.json` files and do the followings:
-1. Fetch `types.map` from [here](https://github.com/xiaoling/figer/blob/master/src/main/resources/edu/washington/cs/figer/analysis/types.map),
-put it under `raw_data` directory as `original_types.map`, copy it to `amended_types.map`, and create an empty tsv file `weaker_types_map.tsv`;
-2. in `data_proc`, run `python create_label_mapping.py --task check --check_fn XXX` to collect information about the distribution of 
-Freebase labels in the corresponding file, look for popular Freebase labels not covered by the original `types.map`, and add them to `amended_types.map`;
-there are some Freebase labels which can be mapped to some FIGER labels when no other mapping is available, 
-but are unsafe to be mapped to those FIGER labels when other options exist, these are added to `weaker_types_map.tsv`;
-3. Also check for incorrect mappings from the original `types.map`, remove them from `amended_types.map`, and add them to `removed_types.map`;
-4. create `SUBSET_wfiger.json` files by running `python create_label_mapping.py --task map2figer --subset XXX`, 
-then re-run `check` task in `create_label_mapping.py` to check for any remaining Freebase labels not covered by the amended `types.map`;
-5. Repeat the above process until satisfactory recall is met (~ 95%), then calculate the relative importance of each 
-FIGER label by running `python create_label_mapping.py --task sort --subset all`; importance is defined as a weighted sum of the number of occurrences, 
-where the weights are reciprocal of the number of FIGER labels in each entry.
-6. According to the relative importance, merge the less important FIGER labels into the more important ones, 
-and split the over-popular FIGER labels into sub-categories to avoid unmanageably-large sub-graphs; in this process, 
-one creates a further mapping from the two-layer FIGER labels to a one-layer entGraph label set, parallel to the FIGER 
-first-layer labels from previous EG experiments.
-7. The mapping from FIGER labels to entGraph labels is specified in the function `generate_entgraph_typeset` in `create_label_mapping.py`,
-and the creation of the mapping / typeset files is done by running `python create_label_mapping.py --task generate_entgraph_typemap --subset all`;
-
-At this point the dependencies for the above pre-processing steps are satisfied, 
-the output of data pre-processing will be used as training data in the section below.
-
-### Developing Classifier
-#### Overview
+## Developing Classifier
+### Overview
 The classifier is a multi-class multi-label sequence classifier based on `bert-base-uncased`.
 There are two major design choices: which tokens to extract representations from, and how large a language model to use;
 - Representation extraction:
@@ -56,14 +27,18 @@ There are two major design choices: which tokens to extract representations from
 or a smaller model with fp32. The hypothesis is that using a larger model with fp16 will give better performance.
 - Hyper-parameters: other hyper-parameters of interest include: learning rate, number of epochs, 
 metric for best model (\[macro_f1, micro_f1\]).
+- Note: empirically we have found using `entity` tokens for representation to be most efficient; removing entity representations harm the performance dramatically, whereas additionally including left and right contexts are not clearly better.
 
-#### Steps
-1. Do cache: `python train.py --do_cache`, this will cache the representations of data entries;
+### Steps
+
+0. NOTE: if you are using the slurm scripts, please change the `#SBATCH` options to match your environment (see [this](https://slurm.schedmd.com/sbatch.html) for detailed documentation);
+1. Do cache: `python train.py --do_cache --label_smoothing_factor 0.1 --reload_data`, this will cache the representations of data entries;
 2. Do train: @ ./classifier;
     - On private servers: do `nohup python -u train.py --do_train --model_name_or_path ../../lms/bert-base-uncased --encode_mode entity --lr 5e-5 --num_train_epochs 5 --metric_best_model macro_f1 --label_smoothing_factor 0.0 > ./logdir/bbu_entity_lsf0.0_5e-5.log &`
     - On Cluster: do `sbatch -p ILCC_GPU --gres gpu:4 -o ./logdir/bbu_cls_entity_lsf0.0_5e-5.log train_script.sh bert-base-uncased cls_entity 5e-5 0.0 /disk/scratch/tli/figer_simple_classifier/model_ckpts/json_data/ /disk/scratch/tli/figer_simple_classifier/model_ckpts/ ../model_ckpts`;
     - Key tunable hyperparameters include:
       - `--encode_mode`: which tokens' representation to take for the classifier;
+      - `--num_clsf_layers`: how many layer MLP to use for the classifier;
       - `--typeset_fn` / `--labels_key`: which typeset to use;
       - `--lr`: the learning rate;
       - `--use_fp16`: whether to use fp16 for speeding up;
@@ -72,7 +47,45 @@ metric for best model (\[macro_f1, micro_f1\]).
       - `--label_smoothing_factor`: the label smoothing factor, by default 0.0, values from 0.0 to 0.2 are reasonable;
 3. Do eval: @ ./classifier:
    - On private servers, do: ``;
-   - On Cluster, do: ``;
+   - On Cluster, do: `sbatch -p ILCC_GPU --gres gpu:2 -o ./logdir/bbu_entity_lsf0.0_5e-5_dev.log eval_script.sh bert-base-uncased entity /home/s2063487/figer_simple_classifier/model_ckpts/model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 /tli/figer_simple_classifier/model_ckpts/json_data/ dev`;
+4. Test predict: @ ./classifier:
+   - On cluster, do: `sbatch -p ILCC_GPU -w duflo --gres gpu:2 -o ./logdir/predict_test.log predict_script.sh bert-base-uncased entity /home/s2063487/figer_simple_classifier/model_ckpts/model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 /tli/figer_simple_classifier/model_ckpts/json_data/ test_wegtypes _bert-base-uncased_entgraph_labels_0.0 0.05 --is_inference --debug`;
 
-### Doing Inference for NewsSpike / NewsCrawl
-To be specified.
+## Doing Inference for NewsSpike / NewsCrawl
+Note: you can create your own inference scripts analogous to `news_proc` and `levy_proc`.
+
+1. load_news_data:
+    - *newsspike*: @news_proc `nohup python -u load_news_data.py --in_path ../../entGraph/news_gen8_p.json --out_dir ../news_data/ --data_name newsspike --out_fn %s_gparser_typing_input.json --mode load > ns_load.log &`;
+    - *newscrawl*: @news_proc `nohup python -u load_news_data.py --in_path ../../news_genC_GG.json --out_dir ../news_data/ --data_name newscrawl --out_fn %s_gparser_typing_input.json --mode load > nc_load.log &`;
+    - *LevyHolt*: @levy_proc `python -u load_levy_data.py`
+2. split loaded news data:
+   - *newsspike*: `nohup python -u load_news_data.py --out_dir ../news_data/ --data_name newsspike --out_fn %s_gparser_typing_input.json --mode split --num_slices 8 --expected_num_lines 63876006 > ns_split.log &`;
+   - *newscrawl*: `nohup python -u load_news_data.py --out_dir ../news_data/ --data_name newscrawl --out_fn %s_gparser_typing_input.json --mode split --num_slices 120 --expected_num_lines 1584274524 > nc_split.log &`;
+   - *LevyHolt*: NA;
+
+[//]: # (3. do cache:)
+
+[//]: # (   - *newsspike*: `sbatch -p ILCC_CPU -o ./logdir/cache_ns_%a_%A.log --array 3-4%4 cache_script.sh bert-base-uncased ../news_data/newsspike_gparser_typing_input 0.0 --reload_data`;)
+
+[//]: # (   - *newscrawl*: `sbatch -p ILCC_CPU -o ./logdir/cache_nc_%a_%A.log --array 0-5%3 cache_script.sh bert-base-uncased ../news_data/newscrawl_gparser_typing_input 0.0 --reload_data`;)
+
+[//]: # (   - *newsspike*: `nohup bash cache_script_pata.sh bert-base-uncased ../news_data/newsspike_gparser_typing_input_4.json 0.0 --reload_data > ./logdir/cache_ns_4.log &`;)
+3. do cache: 
+   - *newsspike*: NA;
+   - *newscrawl*: NA;
+   - *LevyHolt*: `nohup bash cache_script_pata.sh bert-base-uncased ../levy_data/dev_input.json 0.0 --reload_data --spanend_inclusive --force_encode > ./logdir/cache_levy_dev.log &` (the cached files can then be sent to MLP server);
+4. do predict:
+
+[//]: # (   - *newsspike*: `sbatch -p ILCC_GPU -w nuesslein --gres gpu:4 -o ./logdir/predict_ns_7.log predict_script.sh bert-base-uncased entity /home/s2063487/figer_simple_classifier/model_ckpts/model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 /disk/scratch/tli/figer_simple_classifier/model_ckpts/news_data/ newsspike_gparser_typing_input_7 _bert-base-uncased_entgraph_labels_0.0 0.05 --is_inference`;)
+   - *newsspike*: `sbatch -p ILCC_GPU --exclude duflo --array 0 --gres gpu:4 -o ./logdir/predict_ns_%a_%A.log predict_script_array.sh bert-base-uncased entity /home/s2063487/figer_simple_classifier/model_ckpts/model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 /disk/scratch/tli/figer_simple_classifier/model_ckpts/news_data/ newsspike_gparser_typing_input entgraph_labels 0.05 --is_inference --spanend_inclusive`;
+   - *newsspike*: `sbatch -p PGR-Standard --array 4-7 --gres gpu:2 -o ./logdir/predict_ns_%a_%A.log predict_script_array.sh bert-base-uncased entity /home/s2063487/figer_simple_classifier/model_ckpts/model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 /disk/scratch_big/tli/figer_simple_classifier/model_ckpts/news_data/ newsspike_gparser_typing_input entgraph_labels 0.05 --is_inference --spanend_inclusive`;
+   - *newscrawl*: `sbatch -p ILCC_GPU --exclude duflo,levi --array 100-119%4 --gres gpu:4 -o ./logdir/predict_nc_%a_%A.log predict_script_array.sh bert-base-uncased entity /home/s2063487/figer_simple_classifier/model_ckpts/model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 /disk/scratch/tli/figer_simple_classifier/model_ckpts/news_data/ newscrawl_gparser_typing_input entgraph_labels 0.01 --is_inference --spanend_inclusive`;
+   - *newscrawl*: `sbatch -p PGR-Standard --array 0-10:4 --gres gpu:2 -o ./logdir/predict_nc_%a_%A.log predict_script_array.sh bert-base-uncased entity /home/s2063487/figer_simple_classifier/model_ckpts/model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 /disk/scratch_big/tli/figer_simple_classifier/model_ckpts/news_data/ newscrawl_gparser_typing_input entgraph_labels 0.05 --is_inference --spanend_inclusive`;
+   - *newsspike*: `python -u train.py --do_predict --data_dir ../news_data/ --predict_fn newsspike_gparser_typing_input_0.json --model_name_or_path ../../lms/bert-base-uncased --encode_mode entity --output_dir ../model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 --predict_threshold 0.05 --is_inference --predict_half first`;
+   - *LevyHolt*: `sbatch -p PGR-Standard --gres gpu:2 -o ./logdir/predict_levy_dev.log predict_script.sh bert-base-uncased entity /home/s2063487/figer_simple_classifier/model_ckpts/model_ckpts/bert-base-uncased/entity_5e-05_0.0/checkpoint-95000 levy_data /disk/scratch_big/tli/figer_simple_classifier/model_ckpts/levy_data/ dev_input _bert-base-uncased_entgraph_labels_0.0 0.05 --is_inference --spanend_inclusive --force_encode`;
+
+5. Integrate Results:
+   - *newsspike*: `nohup python -u integrate_results.py --data_dir ../news_data/ --data_name newsspike --num_slices 8 --job_name model > ns_integrate_modelout.log &`;
+
+6. Generate typed corpus:
+   - *newsspike*: `nohup python -u integrate_results.py --data_dir ../news_data/ --data_name newsspike --output_fn %s_gparser_typing_output.json --job_name corpus --parsed_fn ../../entGraph_NS/news_gen8_p.json > ns_integrate_corpus.log &`;
